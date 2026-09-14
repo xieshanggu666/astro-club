@@ -68,6 +68,19 @@ def json_list(v):
     return "[]"
 
 
+def delete_photo_files(filenames):
+    """从上传目录删除照片文件。文件名取自数据库，basename 防路径穿越；
+    文件已不存在时静默跳过（幂等）。"""
+    removed = 0
+    for fn in filenames:
+        try:
+            os.remove(os.path.join(UPLOAD_DIR, os.path.basename(fn)))
+            removed += 1
+        except OSError:
+            pass
+    return removed
+
+
 # ---------- 数据组装 ----------
 
 def target_dict(r):
@@ -307,9 +320,15 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(one(conn, "SELECT * FROM sessions WHERE id=?", (sid,)))
 
         if (mm := m(r"/api/sessions/(\d+)")) and method == "DELETE":
-            conn.execute("DELETE FROM sessions WHERE id=?", (int(mm.group(1)),))
+            sid = int(mm.group(1))
+            # 先收集该活动所有记录的照片文件名，删库提交后再删文件
+            files = [r[0] for r in conn.execute(
+                "SELECT p.filename FROM photos p JOIN records r ON r.id=p.record_id"
+                " WHERE r.session_id=?", (sid,)).fetchall()]
+            conn.execute("DELETE FROM sessions WHERE id=?", (sid,))
             conn.commit()
-            return self.send_json({"ok": True})
+            delete_photo_files(files)
+            return self.send_json({"ok": True, "photos_removed": len(files)})
 
         if (mm := m(r"/api/sessions/(\d+)/full")) and method == "GET":
             return self.send_json(load_session_full(conn, int(mm.group(1))))
@@ -413,9 +432,13 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json({"id": cur.lastrowid}, 201)
 
         if (mm := m(r"/api/records/(\d+)")) and method == "DELETE":
-            conn.execute("DELETE FROM records WHERE id=?", (int(mm.group(1)),))
+            rid = int(mm.group(1))
+            files = [r[0] for r in conn.execute(
+                "SELECT filename FROM photos WHERE record_id=?", (rid,)).fetchall()]
+            conn.execute("DELETE FROM records WHERE id=?", (rid,))
             conn.commit()
-            return self.send_json({"ok": True})
+            delete_photo_files(files)
+            return self.send_json({"ok": True, "photos_removed": len(files)})
 
         # 照片：原始字节上传，文件名走查询参数，避免 multipart 解析
         if (mm := m(r"/api/records/(\d+)/photos")) and method == "POST":
@@ -445,12 +468,9 @@ class Handler(BaseHTTPRequestHandler):
             pid = int(mm.group(1))
             ph = one(conn, "SELECT * FROM photos WHERE id=?", (pid,))
             if ph:
-                try:
-                    os.remove(os.path.join(UPLOAD_DIR, ph["filename"]))
-                except OSError:
-                    pass
                 conn.execute("DELETE FROM photos WHERE id=?", (pid,))
                 conn.commit()
+                delete_photo_files([ph["filename"]])
             return self.send_json({"ok": True})
 
         # ===== 观测日志 =====
