@@ -36,6 +36,13 @@ def fmt(s, e):
     return f"{s}–{e}" if s and e else "未排时间"
 
 
+def record_sort_key(rec):
+    """观测记录的夜间排序键：actual_start 按夜间分钟数（凌晨归次日），未填时间的排最后。"""
+    n = norm(rec.get("actual_start"))
+    rid = rec.get("id") or 0
+    return (0, n, rid) if n is not None else (1, 0, rid)
+
+
 def analyze_session(session, items, eq_map):
     """分析一次观测活动。
 

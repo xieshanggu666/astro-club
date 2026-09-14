@@ -93,10 +93,11 @@ def load_session_full(conn, sid):
     records = rows(conn.execute(
         """SELECT r.*, t.name AS target_name, t.type AS target_type
            FROM records r JOIN targets t ON t.id = r.target_id
-           WHERE r.session_id=? ORDER BY r.actual_start, r.id""", (sid,)))
+           WHERE r.session_id=? ORDER BY r.id""", (sid,)))
     for r in records:
         r["exposure"] = json.loads(r["exposure"] or "{}")
         r["photos"] = rows(conn.execute("SELECT * FROM photos WHERE record_id=?", (r["id"],)))
+    records.sort(key=logic.record_sort_key)  # 夜间排序：凌晨归次日，字符串排序会错乱
     return {"session": session, "items": items, "equipment": equipment,
             "analysis": analysis, "records": records}
 
@@ -380,11 +381,14 @@ class Handler(BaseHTTPRequestHandler):
                    " FROM records r JOIN targets t ON t.id=r.target_id JOIN sessions s ON s.id=r.session_id")
             if where:
                 sql += " WHERE " + " AND ".join(where)
-            sql += " ORDER BY s.date DESC, r.actual_start"
+            sql += " ORDER BY s.date DESC, r.id"
             out = rows(conn.execute(sql, args))
             for r in out:
                 r["exposure"] = json.loads(r["exposure"] or "{}")
                 r["photos"] = rows(conn.execute("SELECT * FROM photos WHERE record_id=?", (r["id"],)))
+            # 夜间排序：先按夜间时间（凌晨归次日），再按日期倒序（稳定排序保持组内顺序）
+            out.sort(key=logic.record_sort_key)
+            out.sort(key=lambda r: r["session_date"], reverse=True)
             return self.send_json(out)
 
         if method == "POST" and path == "/api/records":
@@ -465,10 +469,12 @@ class Handler(BaseHTTPRequestHandler):
             recs = rows(conn.execute(
                 """SELECT r.*, s.date AS session_date, s.title AS session_title, s.location
                    FROM records r JOIN sessions s ON s.id=r.session_id
-                   WHERE r.target_id=? ORDER BY s.date, r.actual_start""", (tid,)))
+                   WHERE r.target_id=? ORDER BY s.date, r.id""", (tid,)))
             for r in recs:
                 r["exposure"] = json.loads(r["exposure"] or "{}")
                 r["photos"] = rows(conn.execute("SELECT * FROM photos WHERE record_id=?", (r["id"],)))
+            recs.sort(key=logic.record_sort_key)
+            recs.sort(key=lambda r: r["session_date"])
             target["equipment_needed"] = json.loads(target["equipment_needed"] or "[]")
             return self.send_json({"target": target, "records": recs})
 
