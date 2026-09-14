@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>星野日志 · 天文社团观测助手</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <div class="brand">🔭 星野日志 <span class="sub">天文社团观测计划与记录</span></div>
+  <nav id="tabs">
+    <button data-tab="planner" class="active">观测计划</button>
+    <button data-tab="record">观测记录</button>
+    <button data-tab="logbook">观测日志</button>
+    <button data-tab="targets">目标库</button>
+    <button data-tab="equipment">设备</button>
+  </nav>
+</header>
+<main>
+  <section id="tab-planner" class="tab active"></section>
+  <section id="tab-record" class="tab"></section>
+  <section id="tab-logbook" class="tab"></section>
+  <section id="tab-targets" class="tab"></section>
+  <section id="tab-equipment" class="tab"></section>
+</main>
+<div id="toast"></div>
+<script src="/static/app.js"></script>
+</body>
+</html>
